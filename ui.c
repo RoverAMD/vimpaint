@@ -2,13 +2,16 @@
 
 static const SDL_Color VimPaintLocalWhiteConst = {255, 255, 255 ,255};
 static const SDL_Color VimPaintLocalSystemConst = {51, 51, 51, 255};
+static const SDL_Color VimPaintLocalBlackConst = {0, 0, 0, 0};
 
 struct VimPaintUI_s {
     char* outputFilename;
     SDL_Surface* target;
     SDL_Surface* image;
+    SDL_Color currentColor;
     int currentX;
     int currentY;
+    bool doBorder;
 };
 
 void VimPaintClearSurface(SDL_Surface* target, const SDL_Color color) {
@@ -56,6 +59,17 @@ bool VimPaintUIBlit(const VimPaintUI* uiObj) {
     SDL_Renderer* tempRenderer = SDL_CreateSoftwareRenderer(uiObj->target);
     SDL_SetRenderDrawColor(tempRenderer, 20, 101, 242, 255);
     SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX, centeredY + uiObj->currentY);
+    SDL_SetRenderDrawColor(tempRenderer, 30, 108, 66, 255);
+    if (uiObj->doBorder) {
+        SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX - 1, centeredY + uiObj->currentY);
+        SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX + 1, centeredY + uiObj->currentY);
+        SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX - 1, centeredY + uiObj->currentY + 1);
+        SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX, centeredY + uiObj->currentY + 1);
+        SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX + 1, centeredY + uiObj->currentY + 1);
+        SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX - 1, centeredY + uiObj->currentY - 1);
+        SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX, centeredY + uiObj->currentY - 1);
+        SDL_RenderDrawPoint(tempRenderer, centeredX + uiObj->currentX + 1, centeredY + uiObj->currentY - 1);
+    }
     SDL_RenderPresent(tempRenderer);
     SDL_DestroyRenderer(tempRenderer);
     return true;
@@ -70,12 +84,52 @@ VimPaintUI* VimPaintUICreate(SDL_Surface* target) {
     uiObj->outputFilename = NULL;
     uiObj->target = target;
     uiObj->image = NULL;
+    uiObj->doBorder = true;
     uiObj->currentX = 0;
     uiObj->currentY = 0;
+    uiObj->currentColor = VimPaintLocalBlackConst;
     VimPaintClearSurface(target, VimPaintLocalWhiteConst);
     return uiObj;
 }
 
+bool VimPaintUIIncrementCursorPosition(VimPaintUI* uiObj, const int byX, const int byY) {
+    if (!uiObj)
+        return false;
+    uiObj->currentX += byX;
+    uiObj->currentY += byY;
+    if (uiObj->currentX <= 0 || uiObj->currentX >= uiObj->image->w)
+        uiObj->currentX = 0;
+    if (uiObj->currentY <= 0 || uiObj->currentY >= uiObj->image->h)
+        uiObj->currentY = 0;
+    VimPaintUIBlit(uiObj);
+    return true;
+}
+
+bool VimPaintUIToggleBorder(VimPaintUI* uiObj) {
+    if (!uiObj)
+        return false;
+    uiObj->doBorder = !uiObj->doBorder;
+    return true;
+}
+
+bool VimPaintUISetPixel(VimPaintUI* uiObj, const int piX, const int piY) {
+    VimPaintLog("uiObj = %p, piX = %d, piY = %d", uiObj, piX, piY);
+    if (!uiObj || piX < 0 || piY < 0) {
+        VimPaintLog("Invalid args");
+        return false;
+    }
+    SDL_Renderer* tempRenderer = SDL_CreateSoftwareRenderer(uiObj->image);
+    SDL_SetRenderDrawColor(tempRenderer, uiObj->currentColor.r, uiObj->currentColor.g, uiObj->currentColor.b, uiObj->currentColor.a);
+    SDL_RenderDrawPoint(tempRenderer, piX, piY);
+    SDL_DestroyRenderer(tempRenderer);
+    return true;
+}
+
+bool VimPaintUISetCurrentPixel(VimPaintUI* uiObj) {
+    if (!uiObj)
+        return false;
+    return VimPaintUISetPixel(uiObj, uiObj->currentX, uiObj->currentY);
+}
 
 void VimPaintRenderTextCentered(SDL_Surface* target, TTF_Font* font, const char* text, const int requiredY, const SDL_Color color) {
     if (!font || !target || !text || requiredY < 0) {

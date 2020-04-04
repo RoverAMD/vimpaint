@@ -1,0 +1,14 @@
+So, this is VimPaint - an extraordinary paint program that is as painful to use 
+as Vim. Except you do graphics, not text.
+
+To build this wonderful application, you'll need:
+- SDL 2.0 with the TTF plugin
+- Any C11-capable compiler (though C99 might work too)
+- GNU make
+
+Building it is simple - just run "make", then run the vimpaint executable when 
+the build finishes.
+
+The program is not ready yet and its license is yet to be determined in the 
+future. But, there is and won't be any warranty for this thing... after all, it 
+was made just for fun.

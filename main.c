@@ -138,6 +138,26 @@ void VimPaintAdequateEventLoop(SDL_Window* wnd, VimPaintUI* uiObj) {
         if (ev->type == SDL_QUIT) {
             free(ev);
             return;
+        } else if (ev->type == SDL_KEYDOWN) {
+            const char* kn = SDL_GetKeyName(ev->key.keysym.sym);
+            if (strcmp(kn, "Left") == 0)
+                VimPaintUIIncrementCursorPosition(uiObj, -1, 0);
+            else if (strcmp(kn, "Right") == 0)
+                VimPaintUIIncrementCursorPosition(uiObj, 1, 0);
+            else if (strcmp(kn, "Up") == 0)
+                VimPaintUIIncrementCursorPosition(uiObj, 0, -1);
+            else if (strcmp(kn, "Down") == 0)
+                VimPaintUIIncrementCursorPosition(uiObj, 0, 1);
+            else if (strcmp(kn, "B") == 0)
+                VimPaintUIToggleBorder(uiObj);
+            else if (strcmp(kn, "P") == 0 || strcmp(kn, "Space") == 0)
+                VimPaintUISetCurrentPixel(uiObj);
+            else if (strcmp(kn, "Return") == 0) {
+                VimPaintUISetCurrentPixel(uiObj);
+                VimPaintUIIncrementCursorPosition(uiObj, 0, 1);
+            }
+            VimPaintUIBlit(uiObj);
+            SDL_UpdateWindowSurface(wnd);
         }
         free(ev);
         ev = malloc(sizeof(SDL_Event));
