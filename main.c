@@ -3,6 +3,9 @@
 enum VimPaintMenuSelection_e { VPM_NULL = 0, VPM_QUIT = 1, VPM_CREATE= 2 };
 typedef enum VimPaintMenuSelection_e VimPaintMenuSelection;
 
+enum VimPaintAdditionalTrigger_e { VPT_NULL = 0, VPT_CARECHANGES = 1, VPT_DONTCARECHANGES = 2};
+typedef enum VimPaintAdditionalTrigger_e VimPaintAdditionalTrigger;
+
 #define __drpattern \
                 { \
                     finalNumber = defaultValue; \
@@ -92,6 +95,68 @@ int VimPaintGetNumericInput(SDL_Window* wnd, const char* text, const int default
 
 #undef __drpattern
 
+void VimPaintDisplayMessage(SDL_Window* wnd, const char* text, const bool isError) {
+    if (!wnd || !text || strlen(text) >= 255)
+        return;
+    SDL_Surface* tgt = SDL_GetWindowSurface(wnd);
+    char* fontPath = VimPaintDetectFont();
+    if (!fontPath)
+        return;
+    VimPaintFixPathInplace(fontPath);
+    TTF_Font* fnt = TTF_OpenFont(fontPath, 13);
+    if (!fnt) {
+        VimPaintLog(TTF_GetError());
+        free(fontPath);
+        return;
+    }
+    free(fontPath);
+    SDL_Color bgColor = {74, 152, 85, 255};
+    if (isError) {
+        bgColor.r = 152;
+        bgColor.g = 74;
+        bgColor.b = 113;
+    }
+    int widthOfText, heightOfText = 0;
+    TTF_SizeUTF8(fnt, text, &widthOfText, &heightOfText);
+    SDL_Surface* errorSurface = SDL_CreateRGBSurfaceWithFormat(0, widthOfText + 10, heightOfText + 40, 32, SDL_PIXELFORMAT_RGBA32);
+    SDL_FillRect(errorSurface, NULL, SDL_MapRGBA(bgColor.r, bgColor.g, bgColor.b, bgColor.a));
+    SDL_Surface* rdrText = TTF_RenderUTF8_Solid(fnt, text);
+    if (!rdrText) {
+        SDL_FreeSurface(errorSurface);
+        TTF_CloseFont(fnt);
+        return;
+    }
+    SDL_Rect textBounds = {4, 6, widthOfText, heightOfText};
+    SDL_BlitSurface(rdrText, NULL, tgt, &textBounds);
+    SDL_FreeSurface(rdrText);
+    rdrText = TTF_RenderUTF8_Solid(fnt, "[OK]");
+    int okWidth = (rdrText != NULL) ? rdrText->w : 0;
+    int okHeight = (rdrText != NULL) ? rdrText->h : 0;
+    textBounds = {(widthOfText + 10) / 2 - okWidth / 2, heightOfText + 35 - okHeight, okWidth, okHeight};
+    SDL_BlitSurface(rdrText, NULL, errorSurface, &textBounds);
+    TTF_CloseFont(fnt);
+    SDL_FreeSurface(rdrText);
+    int centeredX = (tgt->w / 2) - (errorSurface->w / 2);
+    int centeredY = (tgt->h / 2) - (errorSurface->h / 2);
+    SDL_Rect targetBlitRect = {centeredX, centeredY, errorSurface->w, errorSurface->h};
+    SDL_BlitSurface(errorSurface, NULL, tgt, &targetBlitRect);
+    SDL_FreeSurface(errorSurface);
+    SDL_UpdateWindowSurface(wnd);
+    SDL_Event* evTmp = malloc(sizeof(SDL_Event));
+    while (SDL_WaitEvent(evTmp) != 0) {
+        if (evTmp->type == SDL_QUIT)
+            break;
+        else if (evTmp->type == SDL_KEYDOWN) {
+            const char* keyName = SDL_GetKeyName(evTmp->key.keysym.sym);
+            if (strcmp(keyName, "Escape") == 0 || strcmp(keyName, "Space") == 0 || strcmp(keyName, "Return") == 0 || strcmp(keyName, "Backspace") == 0)
+                break;
+        }
+        free(evTmp);
+        evTmp = malloc(sizeof(SDL_Event));
+    }
+    free(evTmp);
+}
+
 VimPaintMenuSelection VimPaintStartMenuEventLoop(void) {
     SDL_Event* ev = malloc(sizeof(SDL_Event));
     VimPaintMenuSelection result = VPM_NULL;
@@ -130,10 +195,53 @@ bool VimPaintCreateCanvasProcess(SDL_Window* associatedWindow, int* width, int* 
     return true;
 }
 
+#define __drerrorout(msg) { \
+                    free(userInputKeyID); \
+                    VimPaintDisplayMessage(wnd, msg, true); \
+                    return; }
+                    
+bool VimPaintAttemptSave(SDL_Window* wnd, VimPaintUI* uiObj) {
+    if (!wnd || !uiObj)
+        return false;
+    
+}
+
+void VimPaintMenuEventLoop(SDL_Window* wnd, VimPaintUI* uiObj, const VimPaintAdditionalTrigger trigger) {
+    char* userInputKeyID = NULL;
+    VimPaintGetNumericInput(wnd, "What action?", -1, &userInputKeyID);
+    if (!userInputKeyID || strcmp(userInputKeyID, "Escape") == 0) {
+        free(userInputKeyID);
+        VimPaintUIBlit(uiObj);
+        SDL_UpdateWindowSurface(wnd);
+        return;
+    }
+    bool ignoringChanges = (trigger == VPT_DONTCARECHANGES);
+    if (strcmp(userInputKeyID, "!") == 0) {
+        VimPaintMenuEventLoop(wnd, uiObj, VPT_DONTCARECHANGES);
+        return;
+    } else if (strcmp(userInputKeyID, "W") == 0) {
+        VimPaintMenuEventLoop(wnd, uiObj, VPT_CARECHANGES);
+        return;
+    }
+    if (strcmp(userInputKeyID, "Q") == 0) {
+        if (VimPaintUIHaveUnsavedChanges(uiObj) && trigger == VPT_NULL)
+            __drerrorout(VPL_STR_THEREAREUCHANGES);
+        else if (trigger == VPT_CARECHANGES)
+        VimPaintUIRelease(uiObj);
+        SDL_DestroyWindow(wnd);
+        TTF_Quit();
+        SDL_Quit();
+        exit(0);
+    }
+}
+
+#undef __drerrorout
+
 void VimPaintAdequateEventLoop(SDL_Window* wnd, VimPaintUI* uiObj) {
     VimPaintUIBlit(uiObj);
     SDL_UpdateWindowSurface(wnd);
     SDL_Event* ev = malloc(sizeof(SDL_Event));
+    unsigned cachedZoom = 1;
     while (SDL_WaitEvent(ev) != 0) {
         if (ev->type == SDL_QUIT) {
             free(ev);
@@ -152,7 +260,17 @@ void VimPaintAdequateEventLoop(SDL_Window* wnd, VimPaintUI* uiObj) {
                 VimPaintUIToggleBorder(uiObj);
             else if (strcmp(kn, "P") == 0 || strcmp(kn, "Space") == 0)
                 VimPaintUISetCurrentPixel(uiObj);
-            else if (strcmp(kn, "Return") == 0) {
+            else if (strcmp(kn, "+") == 0 || strcmp(kn, "=") == 0) {
+                if (cachedZoom <= 1)
+                    cachedZoom *= 2;
+                VimPaintUISetZoomCoefficent(uiObj, cachedZoom);
+            else if (strcmp(kn, ":") == 0 || strcmp(kn, "Escape") == 0)
+                VimPaintMenuEventLoop(wnd, uiObj, false);
+            } else if (strcmp(kn, "-") == 0 || strcmp(kn, "_") == 0) {
+                if (cachedZoom >= 2)
+                    cachedZoom /= 2;
+                VimPaintUISetZoomCoefficent(uiObj, cachedZoom);
+            } else if (strcmp(kn, "Return") == 0) {
                 VimPaintUISetCurrentPixel(uiObj);
                 VimPaintUIIncrementCursorPosition(uiObj, 0, 1);
             }

@@ -6,5 +6,7 @@
 #define VPL_STR_INSTRUCTIONQUIT "Press 'q' to exit immediately"
 #define VPL_STR_CCONFWIDTH "Canvas width in pixels (leave empty for auto):"
 #define VPL_STR_CCONFHEIGHT "Canvas height in pixels (leave empty for auto):"
+#define VPL_STR_THEREAREUCHANGES "There are some unsaved changes, use :!q to ignore."
+#define VPL_STR_FILENAMENOTSET "Filename not set."
 
 #endif
