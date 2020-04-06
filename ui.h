@@ -12,6 +12,7 @@ typedef struct VimPaintUI_s VimPaintUI;
 VimPaintUI* VimPaintUICreate(SDL_Surface* target);
 void VimPaintUIDisplayWelcomeText(const VimPaintUI* uiObj);
 void VimPaintUIInitializeInmemoryImage(VimPaintUI* uiObj, const int width, const int height);
+bool VimPaintUILoadImage(VimPaintUI* uiObj, const char* path);
 bool VimPaintUIBlit(const VimPaintUI* uiObj);
 bool VimPaintUIHaveUnsavedChanges(const VimPaintUI* uiObj);
 const char* VimPaintUIGetFilename(const VimPaintUI* uiObj);

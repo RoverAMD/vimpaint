@@ -13,7 +13,7 @@ struct VimPaintUI_s {
     int currentY;
     bool doBorder;
     unsigned zoomCoefficent;
-    bool changesMade;s
+    bool changesMade;
 };
 
 void VimPaintClearSurface(SDL_Surface* target, const SDL_Color color) {
@@ -193,7 +193,7 @@ bool VimPaintUISave(VimPaintUI* uiObj) {
     bool result = (SDL_SaveBMP(uiObj->image, uiObj->outputFilename) == 0);
     uiObj->changesMade = !result;
     return result;
-}s
+}
 
 void VimPaintRenderTextCentered(SDL_Surface* target, TTF_Font* font, const char* text, const int requiredY, const SDL_Color color) {
     if (!font || !target || !text || requiredY < 0) {
@@ -245,6 +245,34 @@ void VimPaintUIDisplayWelcomeText(const VimPaintUI* uiObj) {
         VimPaintRenderTextCentered(uiObj->target, font, VPL_STR_INSTRUCTIONQUIT, base, welcomeTextColor);
         TTF_CloseFont(font);
     }
+}
+
+bool VimPaintUILoadImage(VimPaintUI* uiObj, const char* path) {
+    VimPaintLog("uiObj = %p, path = '%s'", uiObj, path);
+    if (!uiObj || !path) {
+        VimPaintLog("Invalid arguments");
+        return false;
+    }
+    char* pathFixed = VimPaintFixPath(path);
+    if (!VimPaintExists(pathFixed)) {
+        free(pathFixed);
+        VimPaintLog("No such file or directory");
+        return false;
+    }
+    SDL_FreeSurface(uiObj->image);
+    free(uiObj->outputFilename);
+    uiObj->changesMade = false;
+    uiObj->outputFilename = pathFixed;
+    uiObj->image = SDL_LoadBMP(pathFixed);
+    uiObj->currentX = 0;
+    uiObj->currentY = 0;
+    if (!uiObj->image) {
+        free(uiObj->outputFilename);
+        uiObj->outputFilename = NULL;
+        VimPaintLog(SDL_GetError());
+        return false;
+    }
+    return true;
 }
 
 void VimPaintUIRelease(VimPaintUI* uiObj) {

@@ -59,6 +59,8 @@ int VimPaintGetNumericInput(SDL_Window* wnd, const char* text, const int default
             const char* kn = SDL_GetKeyName(kk);
             free(lastKeyBuf);
             lastKeyBuf = strdup(kn);
+            if (invalidlyPressedKeysPtr) 
+                (*invalidlyPressedKeysPtr) = lastKeyBuf;
             if (strcmp(kn, "Escape") == 0) {
                 __drpattern
             } else if (strcmp(kn, "Return") == 0) {
@@ -86,10 +88,6 @@ int VimPaintGetNumericInput(SDL_Window* wnd, const char* text, const int default
         ev = malloc(sizeof(SDL_Event));
     }
     free(finalNumberRaw);
-    if (invalidlyPressedKeysPtr) 
-        (*invalidlyPressedKeysPtr) = lastKeyBuf;
-    else
-        free(lastKeyBuf);
     return finalNumber;
 }
 
@@ -119,20 +117,24 @@ void VimPaintDisplayMessage(SDL_Window* wnd, const char* text, const bool isErro
     int widthOfText, heightOfText = 0;
     TTF_SizeUTF8(fnt, text, &widthOfText, &heightOfText);
     SDL_Surface* errorSurface = SDL_CreateRGBSurfaceWithFormat(0, widthOfText + 10, heightOfText + 40, 32, SDL_PIXELFORMAT_RGBA32);
-    SDL_FillRect(errorSurface, NULL, SDL_MapRGBA(bgColor.r, bgColor.g, bgColor.b, bgColor.a));
-    SDL_Surface* rdrText = TTF_RenderUTF8_Solid(fnt, text);
+    SDL_FillRect(errorSurface, NULL, SDL_MapRGBA(errorSurface->format, bgColor.r, bgColor.g, bgColor.b, bgColor.a));
+    SDL_Color niceTextColor = {255, 255, 255, 255};
+    SDL_Surface* rdrText = TTF_RenderUTF8_Solid(fnt, text, niceTextColor);
     if (!rdrText) {
         SDL_FreeSurface(errorSurface);
         TTF_CloseFont(fnt);
         return;
     }
     SDL_Rect textBounds = {4, 6, widthOfText, heightOfText};
-    SDL_BlitSurface(rdrText, NULL, tgt, &textBounds);
+    SDL_BlitSurface(rdrText, NULL, errorSurface, &textBounds);
     SDL_FreeSurface(rdrText);
-    rdrText = TTF_RenderUTF8_Solid(fnt, "[OK]");
+    rdrText = TTF_RenderUTF8_Solid(fnt, "[OK]", niceTextColor);
     int okWidth = (rdrText != NULL) ? rdrText->w : 0;
     int okHeight = (rdrText != NULL) ? rdrText->h : 0;
-    textBounds = {(widthOfText + 10) / 2 - okWidth / 2, heightOfText + 35 - okHeight, okWidth, okHeight};
+    textBounds.x = (widthOfText + 10) / 2 - okWidth / 2;
+    textBounds.y = (heightOfText + 35) - okHeight;
+    textBounds.w = okWidth;
+    textBounds.h = okHeight;
     SDL_BlitSurface(rdrText, NULL, errorSurface, &textBounds);
     TTF_CloseFont(fnt);
     SDL_FreeSurface(rdrText);
@@ -198,24 +200,35 @@ bool VimPaintCreateCanvasProcess(SDL_Window* associatedWindow, int* width, int* 
 #define __drerrorout(msg) { \
                     free(userInputKeyID); \
                     VimPaintDisplayMessage(wnd, msg, true); \
+                    VimPaintUIBlit(uiObj); \
                     return; }
                     
 bool VimPaintAttemptSave(SDL_Window* wnd, VimPaintUI* uiObj) {
     if (!wnd || !uiObj)
         return false;
-    
+    if (!VimPaintUIGetFilename(uiObj)) {
+        VimPaintDisplayMessage(wnd, VPL_STR_FILENAMENOTSAVEDCC, true);
+        return false;
+    }
+    if (!VimPaintUISave(uiObj)) {
+        VimPaintDisplayMessage(wnd, VPL_STR_EXPORTERRORSTR, true);
+        return false;
+    }
+    VimPaintDisplayMessage(wnd, VPL_STR_SUCCESSSAVE, false);
+    return true;
 }
 
 void VimPaintMenuEventLoop(SDL_Window* wnd, VimPaintUI* uiObj, const VimPaintAdditionalTrigger trigger) {
     char* userInputKeyID = NULL;
-    VimPaintGetNumericInput(wnd, "What action?", -1, &userInputKeyID);
+    VimPaintGetNumericInput(wnd, VPL_STR_WHATACTION, -1, &userInputKeyID);
     if (!userInputKeyID || strcmp(userInputKeyID, "Escape") == 0) {
         free(userInputKeyID);
         VimPaintUIBlit(uiObj);
         SDL_UpdateWindowSurface(wnd);
         return;
     }
-    bool ignoringChanges = (trigger == VPT_DONTCARECHANGES);
+    //bool ignoringChanges = (trigger == VPT_DONTCARECHANGES);
+    VimPaintLog("userInputKeyID = '%s'", userInputKeyID);
     if (strcmp(userInputKeyID, "!") == 0) {
         VimPaintMenuEventLoop(wnd, uiObj, VPT_DONTCARECHANGES);
         return;
@@ -225,13 +238,28 @@ void VimPaintMenuEventLoop(SDL_Window* wnd, VimPaintUI* uiObj, const VimPaintAdd
     }
     if (strcmp(userInputKeyID, "Q") == 0) {
         if (VimPaintUIHaveUnsavedChanges(uiObj) && trigger == VPT_NULL)
-            __drerrorout(VPL_STR_THEREAREUCHANGES);
-        else if (trigger == VPT_CARECHANGES)
+            __drerrorout(VPL_STR_THEREAREUCHANGES)
+        else if (trigger == VPT_CARECHANGES) {
+            if (!VimPaintAttemptSave(wnd, uiObj))
+                __drerrorout(VPL_STR_PROBLEMSWITHSAVING);
+        }
         VimPaintUIRelease(uiObj);
         SDL_DestroyWindow(wnd);
         TTF_Quit();
         SDL_Quit();
         exit(0);
+    } else if (strcmp(userInputKeyID, "S") == 0)
+        VimPaintAttemptSave(wnd, uiObj);
+    else if (strcmp(userInputKeyID, "C") == 0) {
+        int r, g, b = 0;
+        r = VimPaintGetNumericInput(wnd, VPL_STR_REDSTR, -1, NULL);
+        g = VimPaintGetNumericInput(wnd, VPL_STR_GREENSTR, -1, NULL);
+        b = VimPaintGetNumericInput(wnd, VPL_STR_BLUESTR, -1, NULL);
+        if (r < 0 || g < 0 || b < 0)
+            __drerrorout(VPL_STR_CANCELLED)
+        else if (r >= 256 || g >= 256 || b >= 256)
+            __drerrorout(VPL_STR_INVALIDCOLORC)
+    } else if (strcmp(userInputKeyID, "D") == 0) {
     }
 }
 
@@ -264,9 +292,9 @@ void VimPaintAdequateEventLoop(SDL_Window* wnd, VimPaintUI* uiObj) {
                 if (cachedZoom <= 1)
                     cachedZoom *= 2;
                 VimPaintUISetZoomCoefficent(uiObj, cachedZoom);
-            else if (strcmp(kn, ":") == 0 || strcmp(kn, "Escape") == 0)
+            } else if (strcmp(kn, ":") == 0 || strcmp(kn, "Escape") == 0)
                 VimPaintMenuEventLoop(wnd, uiObj, false);
-            } else if (strcmp(kn, "-") == 0 || strcmp(kn, "_") == 0) {
+            else if (strcmp(kn, "-") == 0 || strcmp(kn, "_") == 0) {
                 if (cachedZoom >= 2)
                     cachedZoom /= 2;
                 VimPaintUISetZoomCoefficent(uiObj, cachedZoom);
@@ -282,7 +310,12 @@ void VimPaintAdequateEventLoop(SDL_Window* wnd, VimPaintUI* uiObj) {
     }
 }
 
-int main() {
+#define __drconvcreate { \
+                        int canvasWidth, canvasHeight = 0; \
+                        VimPaintCreateCanvasProcess(wnd, &canvasWidth, &canvasHeight); \
+                        VimPaintUIInitializeInmemoryImage(uiObj, canvasWidth, canvasHeight); }
+
+int main(const int argc, const char** argv) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
@@ -292,21 +325,35 @@ int main() {
         fprintf(stderr, "TTF_Init failed: %s\n", TTF_GetError());
         return 2;
     }
-    SDL_Window* wnd = SDL_CreateWindow("VimPaint", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
+    int wndWidth = 640;
+    int wndHeight = 480;
+    if (argc >= 4 && atoi(argv[2]) >= 100 && atoi(argv[3]) >= 100) {
+        wndWidth = atoi(argv[2]);
+        wndHeight = atoi(argv[3]);
+    }
+    SDL_Window* wnd = SDL_CreateWindow("VimPaint", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, wndWidth, wndHeight, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
     VimPaintUI* uiObj = VimPaintUICreate(SDL_GetWindowSurface(wnd));
     VimPaintUIDisplayWelcomeText(uiObj);
     SDL_UpdateWindowSurface(wnd);
     SDL_RaiseWindow(wnd);
-    if (VimPaintStartMenuEventLoop() == VPM_QUIT) {
-        VimPaintUIRelease(uiObj);
-        TTF_Quit();
-        SDL_Quit();
-        return 0;
+    const char* urlOpened = (argc >= 2) ? argv[1] : NULL;
+    if (!urlOpened) {
+        if (VimPaintStartMenuEventLoop() == VPM_QUIT) {
+            VimPaintUIRelease(uiObj);
+            TTF_Quit();
+            SDL_Quit();
+            return 0;
+        } else
+            __drconvcreate
     } else {
-        int canvasWidth, canvasHeight = 0;
-        VimPaintCreateCanvasProcess(wnd, &canvasWidth, &canvasHeight);
-        VimPaintUIInitializeInmemoryImage(uiObj, canvasWidth, canvasHeight);
+        if (!VimPaintUILoadImage(uiObj, urlOpened)) {
+            VimPaintDisplayMessage(wnd, VPL_STR_FAILEDWILLEMPTY, true);
+            __drconvcreate;
+            VimPaintUISetFilename(uiObj, urlOpened);
+        }
     }
     VimPaintAdequateEventLoop(wnd, uiObj);
     return 0;
 }
+
+#undef __drconvcreate
